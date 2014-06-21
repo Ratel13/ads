@@ -19,6 +19,12 @@
     #if defined(COCOWIZARD_HOVERGAMES_ADS_IAD) && HOVERGAMES_PLATFORM_IS_IOS
         #include <hovergames/ads/provider/IAd.h>
     #endif
+    #if defined(COCOWIZARD_HOVERGAMES_ADS_VUNGLE) && HOVERGAMES_PLATFORM_IS_IOS
+        #include <hovergames/ads/provider/Vungle.h>
+    #endif
+    #if defined(COCOWIZARD_HOVERGAMES_ADS_TAPFORTAP) && HOVERGAMES_PLATFORM_IS_IOS
+        #include <hovergames/ads/provider/TapForTap.h>
+    #endif
 #endif
 
 namespace hovergames {
@@ -46,6 +52,13 @@ void Manager::configureFromFile(const std::string& filename)
         auto value = config.find_as<std::string>(key);
         return value ? *value : "";
     };
+    auto checkRegister = [](Provider* provider, std::function<bool()> cb) {
+        if (provider->weight <= 0 || !cb()) {
+            delete provider;
+        } else {
+            providers.push_back(provider);
+        }
+    };
 
     cooldownInSeconds = configInt("general.cooldownInMinutes", 1) * 60;
     onlyShowEveryNThAd = configInt("general.onlyShowEveryNThAd", 1);
@@ -64,11 +77,9 @@ void Manager::configureFromFile(const std::string& filename)
         p->appId = configString("chartboost." + prefix + "AppId");
         p->appSignature = configString("chartboost." + prefix + "AppSignature");
 
-        if (p->appId.empty() || p->appSignature.empty()) {
-            delete p;
-        } else {
-            providers.push_back(p);
-        }
+        checkRegister(p, [&p]() {
+            return !p->appId.empty() && !p->appSignature.empty();
+        });
     }
 #endif
 
@@ -78,11 +89,27 @@ void Manager::configureFromFile(const std::string& filename)
         p->weight = configInt("revmob.weight", 1);
         p->appId = configString("revmob." + prefix + "AppId");
 
-        if (p->appId.empty()) {
-            delete p;
-        } else {
-            providers.push_back(p);
-        }
+        checkRegister(p, [&p]() { return !p->appId.empty(); });
+    }
+#endif
+
+#if defined(COCOWIZARD_HOVERGAMES_ADS_VUNGLE) && HOVERGAMES_PLATFORM_IS_IOS
+    if (config.contains("vungle")) {
+        auto p = new provider::Vungle();
+        p->weight = configInt("vungle.weight", 1);
+        p->appId = configString("vungle." + prefix + "AppId");
+
+        checkRegister(p, [&p]() { return !p->appId.empty(); });
+    }
+#endif
+
+#if defined(COCOWIZARD_HOVERGAMES_ADS_TAPFORTAP) && HOVERGAMES_PLATFORM_IS_IOS
+    if (config.contains("tapfortap")) {
+        auto p = new provider::TapForTap();
+        p->weight = configInt("tapfortap.weight", 1);
+        p->apiKey = configString("tapfortap.apiKey");
+
+        checkRegister(p, [&p]() { return !p->apiKey.empty(); });
     }
 #endif
 
@@ -90,7 +117,8 @@ void Manager::configureFromFile(const std::string& filename)
     if (config.contains("iad")) {
         auto p = new provider::IAd();
         p->weight = configInt("iad.weight", 1);
-        providers.push_back(p);
+
+        checkRegister(p, [&p]() { return true; });
     }
 #endif
 }
